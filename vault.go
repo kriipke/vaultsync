@@ -85,9 +85,12 @@ func (v *VaultClient) ListSecrets(kvPath string) ([]string, error) {
 
 func (v *VaultClient) GetSecret(secretPath string) (map[string]interface{}, error) {
 	// Convert metadata path to data path for KVv2
+	// Handle different KV engine names
 	dataPath := secretPath
-	if len(secretPath) >= 11 && secretPath[:11] == "kv/metadata" {
-		dataPath = "kv/data" + secretPath[11:]
+	parts := strings.Split(secretPath, "/")
+	if len(parts) >= 2 && parts[1] == "metadata" {
+		// Replace "/metadata/" with "/data/" in the path
+		dataPath = parts[0] + "/data/" + strings.Join(parts[2:], "/")
 	}
 
 	fmt.Printf("Debug: Getting secret from path: %s (converted to: %s)\n", secretPath, dataPath)
@@ -183,55 +186,33 @@ func (v *VaultClient) PullSecretsToFiles(basePath, outputDir string) error {
 	return nil
 }
 
-func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string]interface{}, basePath, outputDir string) error {
-	// Convert vault path to file path that matches what push expects
-	// For basePath "kv/metadata" and secretPath "kv/metadata/app/db", we want "./outputDir/app/db.yaml"
-	// For basePath "kv/metadata/app" and secretPath "kv/metadata/app/db", we want "./outputDir/db.yaml"
+func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string]interface{}, metadataPath, outputDir string) error {
+	// metadataPath is like "kv/metadata" or "kv/metadata/app"
+	// secretPath is like "kv/metadata/app/db" or "kv/metadata/shared/config"
 	
-	var relativePath string
+	// Extract the relative path from the secret path
+	relativePath := strings.TrimPrefix(secretPath, metadataPath)
+	relativePath = strings.TrimPrefix(relativePath, "/") // Remove leading slash if present
 	
-	if strings.HasPrefix(basePath, "kv/metadata") {
-		// Remove the basePath prefix to get the relative secret path
-		if secretPath == basePath {
-			// Edge case: secret is at the exact base path
-			relativePath = ""
-		} else {
-			// Remove basePath + "/" from secretPath
-			relativePath = strings.TrimPrefix(secretPath, basePath+"/")
-		}
-		
-		// Remove any remaining kv/metadata or kv/data prefixes
-		relativePath = strings.TrimPrefix(relativePath, "kv/metadata/")
-		relativePath = strings.TrimPrefix(relativePath, "kv/data/")
-	} else {
-		// For non-kv/metadata paths, use the full relative path
-		relativePath = strings.TrimPrefix(secretPath, basePath+"/")
-	}
-	
-	// If we have a subpath in basePath, we need to account for it in the file structure
-	var targetDir string
-	if strings.HasPrefix(basePath, "kv/metadata") {
-		subPath := strings.TrimPrefix(basePath, "kv/metadata")
-		subPath = strings.TrimPrefix(subPath, "/")
-		if subPath != "" {
-			// basePath has a subpath, so files should go in outputDir/subPath/
-			targetDir = filepath.Join(outputDir, subPath)
-		} else {
-			// basePath is just "kv/metadata", files go directly in outputDir
-			targetDir = outputDir
-		}
-	} else {
-		targetDir = outputDir
-	}
-	
-	// Create file path with .yaml extension
-	var filePath string
 	if relativePath == "" {
 		// Handle edge case where secret name would be empty
 		return fmt.Errorf("cannot determine file name for secret %s", secretPath)
 	}
 	
-	filePath = filepath.Join(targetDir, relativePath+".yaml")
+	// Extract subpath from metadataPath to determine target directory
+	parts := strings.Split(metadataPath, "/")
+	var targetDir string
+	if len(parts) > 2 {
+		// metadataPath has subpath like "kv/metadata/app"
+		subPath := strings.Join(parts[2:], "/")
+		targetDir = filepath.Join(outputDir, subPath)
+	} else {
+		// metadataPath is just "kv/metadata"
+		targetDir = outputDir
+	}
+	
+	// Create file path with .yaml extension
+	filePath := filepath.Join(targetDir, relativePath+".yaml")
 	
 	// Create directory structure
 	dir := filepath.Dir(filePath)
@@ -255,12 +236,13 @@ func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string
 }
 
 func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interface{}) error {
-	// Ensure we're using the data path for KVv2
+	// Convert metadata path to data path for KVv2
+	// Handle different KV engine names
 	dataPath := secretPath
-	if strings.HasPrefix(secretPath, "kv/metadata/") {
-		dataPath = "kv/data/" + strings.TrimPrefix(secretPath, "kv/metadata/")
-	} else if !strings.HasPrefix(secretPath, "kv/data/") {
-		dataPath = "kv/data/" + secretPath
+	parts := strings.Split(secretPath, "/")
+	if len(parts) >= 2 && parts[1] == "metadata" {
+		// Replace "/metadata/" with "/data/" in the path
+		dataPath = parts[0] + "/data/" + strings.Join(parts[2:], "/")
 	}
 
 	url := fmt.Sprintf("%s/v1/%s", v.Address, dataPath)
@@ -298,28 +280,29 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 	return nil
 }
 
-func (v *VaultClient) PushSecretsFromFiles(inputDir, kvPath string, dryRun bool) error {
-	// Derive the base path from kvPath for file discovery
-	// kvPath is like "kv/metadata", we need to find files that would map back to secrets under this path
+func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun bool) error {
+	// metadataPath is like "kv/metadata" or "kv/metadata/app"
+	// We need to derive the base directory for file discovery
 	var baseDir string
 	
-	// If kvPath contains "kv/metadata", remove it to get the sub-path
-	if strings.HasPrefix(kvPath, "kv/metadata") {
-		subPath := strings.TrimPrefix(kvPath, "kv/metadata")
-		subPath = strings.TrimPrefix(subPath, "/") // Remove leading slash if present
-		if subPath == "" {
-			baseDir = inputDir
-		} else {
-			baseDir = filepath.Join(inputDir, subPath)
-		}
+	// Extract the KV engine name and subpath
+	parts := strings.Split(metadataPath, "/")
+	if len(parts) < 2 || parts[1] != "metadata" {
+		return fmt.Errorf("invalid metadata path: %s", metadataPath)
+	}
+	
+	kvEngine := parts[0]
+	var subPath string
+	if len(parts) > 2 {
+		subPath = strings.Join(parts[2:], "/")
+		baseDir = filepath.Join(inputDir, subPath)
 	} else {
-		// For other paths, use the kvPath as a subdirectory
-		baseDir = filepath.Join(inputDir, strings.TrimPrefix(kvPath, "kv/"))
+		baseDir = inputDir
 	}
 
 	// Check if base directory exists
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return fmt.Errorf("directory %s does not exist (derived from vault path %s)", baseDir, kvPath)
+		return fmt.Errorf("directory %s does not exist (derived from vault path %s)", baseDir, metadataPath)
 	}
 
 	return filepath.Walk(baseDir, func(filePath string, info os.FileInfo, err error) error {
@@ -354,17 +337,12 @@ func (v *VaultClient) PushSecretsFromFiles(inputDir, kvPath string, dryRun bool)
 		secretPath := strings.TrimSuffix(relativePath, ".yaml")
 		secretPath = strings.ReplaceAll(secretPath, string(filepath.Separator), "/")
 		
-		// Construct full vault path based on the kvPath structure
+		// Construct full vault metadata path
 		var vaultPath string
-		if strings.HasPrefix(kvPath, "kv/metadata") {
-			if subPath := strings.TrimPrefix(kvPath, "kv/metadata"); subPath != "" {
-				subPath = strings.TrimPrefix(subPath, "/")
-				vaultPath = "kv/metadata/" + subPath + "/" + secretPath
-			} else {
-				vaultPath = "kv/metadata/" + secretPath
-			}
+		if subPath != "" {
+			vaultPath = kvEngine + "/metadata/" + subPath + "/" + secretPath
 		} else {
-			vaultPath = kvPath + "/" + secretPath
+			vaultPath = kvEngine + "/metadata/" + secretPath
 		}
 
 		if dryRun {

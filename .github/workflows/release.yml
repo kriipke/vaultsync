@@ -72,7 +72,7 @@ jobs:
         fi
 
     - name: Upload build artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.ASSET }}
         path: ${{ env.ASSET }}
@@ -97,7 +97,7 @@ jobs:
         fi
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: ./artifacts
 
@@ -150,14 +150,14 @@ jobs:
           export VAULT_TOKEN="your-token"
           
           # List secrets
-          vaultsync list namespace kv/metadata
+          vaultsync list namespace
           
           # Pull secrets to files
-          vaultsync pull namespace kv/metadata
+          vaultsync pull namespace
           
           # Push secrets back (with dry-run)
-          vaultsync push namespace kv/metadata --dry-run
-          vaultsync push namespace kv/metadata
+          vaultsync push namespace --dry-run
+          vaultsync push namespace
           ```
           
           ## Checksums

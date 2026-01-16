@@ -57,60 +57,66 @@ export VAULT_TOKEN="your-hcp-token"
 
 #### List Secrets
 ```bash
-vaultsync list <namespace> <kvv2-path>
+vaultsync [--kv-engine=name] list <namespace> [path]
 
 # Examples
-vaultsync list my-namespace kv/metadata
-vaultsync list my-namespace kv/metadata/app
+vaultsync list my-namespace                    # list all secrets in default 'kv' engine
+vaultsync list my-namespace app                # list secrets under 'app' path
+vaultsync --kv-engine=secrets list my-namespace app  # use 'secrets' engine instead of 'kv'
 ```
 
 #### Pull Secrets to Files
 ```bash
-vaultsync pull <namespace> <kvv2-path> [output-dir]
+vaultsync [--kv-engine=name] pull <namespace> [path] [output-dir]
 
 # Examples
-vaultsync pull my-namespace kv/metadata                    # saves to ./vault-secrets/
-vaultsync pull my-namespace kv/metadata ./my-secrets      # saves to ./my-secrets/
-vaultsync pull my-namespace kv/metadata/app ./app-secrets # saves to ./app-secrets/app/
+vaultsync pull my-namespace                     # pull all from 'kv' to ./vault-secrets/
+vaultsync pull my-namespace app                 # pull 'app' path to ./vault-secrets/app/
+vaultsync pull my-namespace app ./secrets      # pull 'app' path to ./secrets/app/
+vaultsync --kv-engine=secrets pull my-namespace app  # use 'secrets' engine
 ```
 
 #### Push Secrets from Files
 ```bash
-vaultsync push <namespace> <kvv2-path> [input-dir] [--dry-run]
+vaultsync [--kv-engine=name] push <namespace> [path] [input-dir] [--dry-run]
 
 # Examples
-vaultsync push my-namespace kv/metadata --dry-run          # dry-run from ./vault-secrets/
-vaultsync push my-namespace kv/metadata                    # push from ./vault-secrets/
-vaultsync push my-namespace kv/metadata ./my-secrets      # push from ./my-secrets/
+vaultsync push my-namespace --dry-run           # dry-run all from ./vault-secrets/
+vaultsync push my-namespace                     # push all from ./vault-secrets/
+vaultsync push my-namespace app --dry-run       # dry-run 'app' path from ./vault-secrets/app/
+vaultsync push my-namespace app ./secrets      # push 'app' from ./secrets/app/
 ```
 
 ### Workflow Example
 
 ```bash
 # 1. Pull secrets from Vault
-vaultsync pull my-namespace kv/metadata
+vaultsync pull my-namespace
 
 # 2. Edit files in ./vault-secrets/
 # Files are organized like: ./vault-secrets/app/database.yaml
 
 # 3. Preview changes with enhanced diff
-vaultsync push my-namespace kv/metadata --dry-run | delta
+vaultsync push my-namespace --dry-run | delta
 
 # 4. Push changes back to Vault
-vaultsync push my-namespace kv/metadata
+vaultsync push my-namespace
 ```
 
 ## Directory Structure
 
 The tool maintains a consistent directory structure between pull and push operations:
 
-**Vault Path → File Path**
-- `kv/metadata/app/database` → `./vault-secrets/app/database.yaml`
-- `kv/metadata/shared/config` → `./vault-secrets/shared/config.yaml`
+**Vault Path → File Path (default 'kv' engine)**
+- `kv/app/database` → `./vault-secrets/app/database.yaml`
+- `kv/shared/config` → `./vault-secrets/shared/config.yaml`
 
 **For specific subpaths:**
-- Pull from `kv/metadata/app` → Files in `./vault-secrets/app/`
-- Push to `kv/metadata/app` → Reads files from `./vault-secrets/app/`
+- Pull from `app` → Files in `./vault-secrets/app/`
+- Push to `app` → Reads files from `./vault-secrets/app/`
+
+**Custom KV engines:**
+- `--kv-engine=secrets` with path `app/db` → `./vault-secrets/app/db.yaml`
 
 ## Enhanced Diff Output
 
