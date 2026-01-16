@@ -1,0 +1,167 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create release for'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          # Windows ARM64 builds are less common
+          - goos: windows
+            goarch: arm64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Set release version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        # Set binary name with proper extension
+        BINARY_NAME="vaultsync"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY_NAME="${BINARY_NAME}.exe"
+        fi
+        
+        # Build the binary
+        go build -a -installsuffix cgo -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }}" -o $BINARY_NAME .
+        
+        # Create archive
+        ARCHIVE_NAME="vaultsync-${{ steps.version.outputs.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          zip "${ARCHIVE_NAME}.zip" $BINARY_NAME README.md
+          echo "ASSET=${ARCHIVE_NAME}.zip" >> $GITHUB_ENV
+        else
+          tar -czf "${ARCHIVE_NAME}.tar.gz" $BINARY_NAME README.md
+          echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.ASSET }}
+        path: ${{ env.ASSET }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set release version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+
+    - name: Move artifacts to root
+      run: |
+        find ./artifacts -type f -exec mv {} . \;
+
+    - name: Generate checksums
+      run: |
+        for file in vaultsync-*; do
+          if [ -f "$file" ]; then
+            sha256sum "$file" >> checksums.txt
+          fi
+        done
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: Release ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          vaultsync-*
+          checksums.txt
+        body: |
+          ## Installation
+          
+          Download the appropriate binary for your platform from the assets below.
+          
+          ### Linux/macOS
+          ```bash
+          # Download and extract (replace with your platform)
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/vaultsync-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz | tar xz
+          
+          # Make executable and move to PATH
+          chmod +x vaultsync
+          sudo mv vaultsync /usr/local/bin/
+          ```
+          
+          ### Windows
+          Download the `.zip` file and extract `vaultsync.exe` to a directory in your PATH.
+          
+          ## Usage
+          
+          ```bash
+          # Set environment variables
+          export VAULT_ADDR="https://your-vault.example.com:8200"
+          export VAULT_TOKEN="your-token"
+          
+          # List secrets
+          vaultsync list namespace kv/metadata
+          
+          # Pull secrets to files
+          vaultsync pull namespace kv/metadata
+          
+          # Push secrets back (with dry-run)
+          vaultsync push namespace kv/metadata --dry-run
+          vaultsync push namespace kv/metadata
+          ```
+          
+          ## Checksums
+          
+          Verify your download with the checksums provided in `checksums.txt`.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
