@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(./vaultsync)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

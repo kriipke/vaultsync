@@ -301,8 +301,9 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 		return fmt.Errorf("failed to marshal JSON payload: %w", err)
 	}
 	fmt.Printf("[DEBUG] Request payload size: %d bytes\n", len(jsonData))
+	fmt.Printf("[DEBUG] Request payload: %s\n", string(jsonData))
 
-	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
+	req, err := http.NewRequest("PUT", url, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -312,7 +313,7 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 	req.Header.Set("Content-Type", "application/json")
 	fmt.Printf("[DEBUG] Request headers set - Namespace: %s, Content-Type: application/json\n", v.Namespace)
 
-	fmt.Printf("[DEBUG] Sending HTTP POST request...\n")
+	fmt.Printf("[DEBUG] Sending HTTP PUT request...\n")
 	resp, err := v.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
@@ -336,6 +337,68 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 	if len(body) > 0 {
 		fmt.Printf("[DEBUG] Response body: %s\n", string(body))
 	}
+	
+	// Verify the write by reading back the secret to check version
+	if err := v.verifySecretWrite(secretPath); err != nil {
+		fmt.Printf("[WARNING] Could not verify secret write: %v\n", err)
+	}
+	
+	return nil
+}
+
+func (v *VaultClient) verifySecretWrite(secretPath string) error {
+	fmt.Printf("[DEBUG] Verifying secret write for: %s\\n", secretPath)
+	
+	// Read the secret back to verify it was written and get version info
+	secretData, err := v.GetSecret(secretPath)
+	if err != nil {
+		return fmt.Errorf("failed to read back secret for verification: %w", err)
+	}
+	
+	// secretPath is already a metadata path (e.g., "kv/metadata/myapp/config")
+	// Use it directly for the metadata endpoint
+	metadataPath := secretPath
+	
+	// Make request to metadata endpoint to get version info
+	url := fmt.Sprintf("%s/v1/%s", v.Address, metadataPath)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create metadata request: %w", err)
+	}
+
+	req.Header.Set("X-Vault-Token", v.Token)
+	req.Header.Set("X-Vault-Namespace", v.Namespace)
+
+	resp, err := v.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("metadata request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("metadata request failed with HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata response: %w", err)
+	}
+
+	var metadataResp struct {
+		Data struct {
+			CurrentVersion int `json:"current_version"`
+			Versions       map[string]interface{} `json:"versions"`
+		} `json:"data"`
+	}
+	
+	if err := json.Unmarshal(body, &metadataResp); err != nil {
+		return fmt.Errorf("failed to parse metadata response: %w", err)
+	}
+	
+	fmt.Printf("[SUCCESS] Secret verified - Current version: %d, Data keys: %v\\n", 
+		metadataResp.Data.CurrentVersion, getMapKeys(secretData))
+	
 	return nil
 }
 
