@@ -48,6 +48,43 @@ func NewVaultClient(address, token, namespace string) *VaultClient {
 	}
 }
 
+func (v *VaultClient) TestConnectivity() error {
+	fmt.Printf("[DEBUG] Testing Vault connectivity...\\n")
+	
+	// Test basic connectivity by hitting the sys/health endpoint
+	url := fmt.Sprintf("%s/v1/sys/health", v.Address)
+	fmt.Printf("[DEBUG] Testing connectivity to: %s\\n", url)
+	
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create connectivity test request: %w", err)
+	}
+
+	// Note: sys/health doesn't typically require authentication, but we'll include headers anyway
+	req.Header.Set("X-Vault-Token", v.Token)
+	req.Header.Set("X-Vault-Namespace", v.Namespace)
+
+	resp, err := v.client.Do(req)
+	if err != nil {
+		fmt.Printf("[ERROR] Connectivity test failed: %v\\n", err)
+		return fmt.Errorf("cannot connect to Vault at %s: %w", v.Address, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Printf("[DEBUG] Connectivity test response: %d %s\\n", resp.StatusCode, resp.Status)
+	fmt.Printf("[DEBUG] Response body: %s\\n", string(body))
+
+	// Health endpoint returns various status codes (200, 429, 472, 473, 501, 503)
+	// We consider any response (even error codes) as successful connectivity
+	if resp.StatusCode >= 200 && resp.StatusCode < 600 {
+		fmt.Printf("[DEBUG] Vault connectivity test successful\\n")
+		return nil
+	}
+	
+	return fmt.Errorf("unexpected response from Vault health check: %d %s", resp.StatusCode, resp.Status)
+}
+
 func (v *VaultClient) ListSecrets(kvPath string) ([]string, error) {
 	url := fmt.Sprintf("%s/v1/%s?list=true", v.Address, kvPath)
 
@@ -236,6 +273,9 @@ func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string
 }
 
 func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interface{}) error {
+	fmt.Printf("[DEBUG] PutSecret called with path: %s\n", secretPath)
+	fmt.Printf("[DEBUG] Secret data keys: %v\n", getMapKeys(secretData))
+	
 	// Convert metadata path to data path for KVv2
 	// Handle different KV engine names
 	dataPath := secretPath
@@ -243,9 +283,13 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 	if len(parts) >= 2 && parts[1] == "metadata" {
 		// Replace "/metadata/" with "/data/" in the path
 		dataPath = parts[0] + "/data/" + strings.Join(parts[2:], "/")
+		fmt.Printf("[DEBUG] Converted metadata path %s to data path %s\n", secretPath, dataPath)
+	} else {
+		fmt.Printf("[DEBUG] Using path as-is (not metadata path): %s\n", secretPath)
 	}
 
 	url := fmt.Sprintf("%s/v1/%s", v.Address, dataPath)
+	fmt.Printf("[DEBUG] Making PUT request to URL: %s\n", url)
 
 	// KVv2 requires wrapping data in a "data" field
 	payload := map[string]interface{}{
@@ -254,33 +298,53 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal JSON: %w", err)
+		return fmt.Errorf("failed to marshal JSON payload: %w", err)
 	}
+	fmt.Printf("[DEBUG] Request payload size: %d bytes\n", len(jsonData))
 
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	req.Header.Set("X-Vault-Token", v.Token)
 	req.Header.Set("X-Vault-Namespace", v.Namespace)
 	req.Header.Set("Content-Type", "application/json")
+	fmt.Printf("[DEBUG] Request headers set - Namespace: %s, Content-Type: application/json\n", v.Namespace)
 
+	fmt.Printf("[DEBUG] Sending HTTP POST request...\n")
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	fmt.Printf("[DEBUG] Received HTTP response: %d %s\n", resp.StatusCode, resp.Status)
+
+	// Read response body for detailed error reporting
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		fmt.Printf("[WARNING] Failed to read response body: %v\n", readErr)
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fmt.Printf("[ERROR] HTTP error response body: %s\n", string(body))
+		return fmt.Errorf("HTTP %d (%s): %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	fmt.Printf("[DEBUG] Successfully wrote secret to %s\n", dataPath)
+	if len(body) > 0 {
+		fmt.Printf("[DEBUG] Response body: %s\n", string(body))
+	}
 	return nil
 }
 
 func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun bool) error {
+	fmt.Printf("[DEBUG] PushSecretsFromFiles called:\n")
+	fmt.Printf("[DEBUG]   inputDir: %s\n", inputDir)
+	fmt.Printf("[DEBUG]   metadataPath: %s\n", metadataPath)
+	fmt.Printf("[DEBUG]   dryRun: %t\n", dryRun)
+	
 	// metadataPath is like "kv/metadata" or "kv/metadata/app"
 	// We need to derive the base directory for file discovery
 	var baseDir string
@@ -288,7 +352,7 @@ func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun
 	// Extract the KV engine name and subpath
 	parts := strings.Split(metadataPath, "/")
 	if len(parts) < 2 || parts[1] != "metadata" {
-		return fmt.Errorf("invalid metadata path: %s", metadataPath)
+		return fmt.Errorf("invalid metadata path format: %s (expected format: engine/metadata[/subpath])", metadataPath)
 	}
 	
 	kvEngine := parts[0]
@@ -296,46 +360,73 @@ func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun
 	if len(parts) > 2 {
 		subPath = strings.Join(parts[2:], "/")
 		baseDir = filepath.Join(inputDir, subPath)
+		fmt.Printf("[DEBUG] Derived baseDir with subPath: %s (subPath: %s)\n", baseDir, subPath)
 	} else {
 		baseDir = inputDir
+		fmt.Printf("[DEBUG] Using inputDir as baseDir: %s\n", baseDir)
 	}
+	fmt.Printf("[DEBUG] KV engine: %s\n", kvEngine)
 
 	// Check if base directory exists
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+	if stat, err := os.Stat(baseDir); os.IsNotExist(err) {
 		return fmt.Errorf("directory %s does not exist (derived from vault path %s)", baseDir, metadataPath)
+	} else if err != nil {
+		return fmt.Errorf("failed to stat directory %s: %w", baseDir, err)
+	} else if !stat.IsDir() {
+		return fmt.Errorf("path %s exists but is not a directory", baseDir)
 	}
+	fmt.Printf("[DEBUG] Base directory %s exists and is accessible\n", baseDir)
 
-	return filepath.Walk(baseDir, func(filePath string, info os.FileInfo, err error) error {
+	var processedFiles int
+	var failedFiles int
+
+	err := filepath.Walk(baseDir, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			fmt.Printf("[ERROR] Walk error for path %s: %v\n", filePath, err)
+			return fmt.Errorf("filesystem walk error at %s: %w", filePath, err)
 		}
 
 		// Skip directories and non-YAML files
-		if info.IsDir() || !strings.HasSuffix(filePath, ".yaml") {
+		if info.IsDir() {
+			fmt.Printf("[DEBUG] Skipping directory: %s\n", filePath)
 			return nil
 		}
+		if !strings.HasSuffix(filePath, ".yaml") {
+			fmt.Printf("[DEBUG] Skipping non-YAML file: %s\n", filePath)
+			return nil
+		}
+
+		fmt.Printf("[DEBUG] Processing YAML file: %s\n", filePath)
+		processedFiles++
 
 		// Read YAML file
 		yamlData, err := os.ReadFile(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", filePath, err)
+			failedFiles++
+			return fmt.Errorf("failed to read YAML file %s: %w", filePath, err)
 		}
+		fmt.Printf("[DEBUG] Read %d bytes from %s\n", len(yamlData), filePath)
 
 		// Parse YAML
 		var secretData map[string]interface{}
 		if err := yaml.Unmarshal(yamlData, &secretData); err != nil {
-			return fmt.Errorf("failed to parse YAML in %s: %w", filePath, err)
+			failedFiles++
+			return fmt.Errorf("failed to parse YAML in file %s: %w", filePath, err)
 		}
+		fmt.Printf("[DEBUG] Parsed YAML with %d top-level keys: %v\n", len(secretData), getMapKeys(secretData))
 
 		// Convert file path back to vault path
 		relativePath, err := filepath.Rel(baseDir, filePath)
 		if err != nil {
-			return fmt.Errorf("failed to get relative path: %w", err)
+			failedFiles++
+			return fmt.Errorf("failed to get relative path for %s from base %s: %w", filePath, baseDir, err)
 		}
+		fmt.Printf("[DEBUG] Relative path: %s\n", relativePath)
 
 		// Remove .yaml extension and convert to vault path
 		secretPath := strings.TrimSuffix(relativePath, ".yaml")
 		secretPath = strings.ReplaceAll(secretPath, string(filepath.Separator), "/")
+		fmt.Printf("[DEBUG] Secret path (normalized): %s\n", secretPath)
 		
 		// Construct full vault metadata path
 		var vaultPath string
@@ -344,14 +435,36 @@ func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun
 		} else {
 			vaultPath = kvEngine + "/metadata/" + secretPath
 		}
+		fmt.Printf("[DEBUG] Final vault path: %s\n", vaultPath)
 
 		if dryRun {
+			fmt.Printf("[DRY-RUN] Would process: %s\n", vaultPath)
 			return v.showDryRunDiff(vaultPath, secretData)
 		} else {
-			fmt.Printf("Pushing: %s\n", vaultPath)
-			return v.PutSecret(vaultPath, secretData)
+			fmt.Printf("[PUSH] Processing: %s\n", vaultPath)
+			if err := v.PutSecret(vaultPath, secretData); err != nil {
+				failedFiles++
+				return fmt.Errorf("failed to push secret %s: %w", vaultPath, err)
+			}
+			fmt.Printf("[SUCCESS] Successfully pushed: %s\n", vaultPath)
 		}
+		return nil
 	})
+
+	fmt.Printf("[DEBUG] Push operation summary:\n")
+	fmt.Printf("[DEBUG]   Total files processed: %d\n", processedFiles)
+	fmt.Printf("[DEBUG]   Failed files: %d\n", failedFiles)
+
+	if err != nil {
+		return fmt.Errorf("push operation failed: %w", err)
+	}
+
+	if processedFiles == 0 {
+		fmt.Printf("[WARNING] No YAML files found to process in directory %s\n", baseDir)
+		return fmt.Errorf("no YAML files found in directory %s", baseDir)
+	}
+
+	return nil
 }
 
 func (v *VaultClient) showDryRunDiff(vaultPath string, newData map[string]interface{}) error {
@@ -519,6 +632,14 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 var diffTool string

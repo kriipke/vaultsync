@@ -217,9 +217,27 @@ func handlePushCommand(args []string) {
 		fmt.Printf("Pushing secrets from %s to %s in namespace %s...\n", inputDir, pathDesc, namespace)
 	}
 
+	fmt.Printf("[DEBUG] Starting push operation with client config:\\n")
+	fmt.Printf("[DEBUG]   Vault Address: %s\\n", client.Address)
+	fmt.Printf("[DEBUG]   Namespace: %s\\n", client.Namespace)
+	fmt.Printf("[DEBUG]   Token length: %d characters\\n", len(client.Token))
+	
+	// Test connectivity before attempting the push
+	if err := client.TestConnectivity(); err != nil {
+		fmt.Printf("[ERROR] Vault connectivity test failed: %v\\n", err)
+		log.Fatalf("Cannot connect to Vault: %v", err)
+	}
+	
 	err := client.PushSecretsFromFiles(inputDir, metadataPath, dryRun)
 	if err != nil {
-		log.Fatalf("Failed to push secrets: %v", err)
+		fmt.Printf("[ERROR] Push operation failed: %v\\n", err)
+		fmt.Printf("[DEBUG] Common issues to check:\\n")
+		fmt.Printf("[DEBUG]   - Verify VAULT_ADDR is correct and accessible\\n")
+		fmt.Printf("[DEBUG]   - Verify VAULT_TOKEN has sufficient permissions\\n")
+		fmt.Printf("[DEBUG]   - Verify namespace '%s' exists and is accessible\\n", namespace)
+		fmt.Printf("[DEBUG]   - Check if KV engine '%s' is mounted and accessible\\n", *kvEngine)
+		fmt.Printf("[DEBUG]   - Ensure input directory '%s' contains valid YAML files\\n", inputDir)
+		log.Fatalf("Push operation failed: %v", err)
 	}
 
 	if dryRun {
@@ -230,15 +248,32 @@ func handlePushCommand(args []string) {
 }
 
 func getVaultClient(namespace string) *VaultClient {
+	fmt.Printf("[DEBUG] Creating Vault client...\\n")
+	
 	vaultAddr := os.Getenv("VAULT_ADDR")
 	if vaultAddr == "" {
+		fmt.Printf("[ERROR] VAULT_ADDR environment variable is not set\\n")
+		fmt.Printf("[DEBUG] Please set VAULT_ADDR to your Vault server URL (e.g., https://vault.example.com:8200)\\n")
 		log.Fatal("VAULT_ADDR environment variable is required")
 	}
+	fmt.Printf("[DEBUG] Using VAULT_ADDR: %s\\n", vaultAddr)
 
 	vaultToken := os.Getenv("VAULT_TOKEN")
 	if vaultToken == "" {
+		fmt.Printf("[ERROR] VAULT_TOKEN environment variable is not set\\n")
+		fmt.Printf("[DEBUG] Please set VAULT_TOKEN to a valid Vault authentication token\\n")
 		log.Fatal("VAULT_TOKEN environment variable is required")
 	}
+	fmt.Printf("[DEBUG] VAULT_TOKEN is set (%d characters)\\n", len(vaultToken))
 
-	return NewVaultClient(vaultAddr, vaultToken, namespace)
+	if namespace == "" {
+		fmt.Printf("[ERROR] Namespace cannot be empty\\n")
+		log.Fatal("Namespace is required")
+	}
+	fmt.Printf("[DEBUG] Using namespace: %s\\n", namespace)
+
+	client := NewVaultClient(vaultAddr, vaultToken, namespace)
+	fmt.Printf("[DEBUG] Vault client created successfully\\n")
+	
+	return client
 }
