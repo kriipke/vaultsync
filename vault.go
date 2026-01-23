@@ -38,6 +38,9 @@ type VaultSecretResponse struct {
 }
 
 func NewVaultClient(address, token, namespace string) *VaultClient {
+	// Ensure address doesn't end with slash to prevent double slashes in URLs
+	address = strings.TrimSuffix(address, "/")
+	
 	return &VaultClient{
 		Address:   address,
 		Token:     token,
@@ -303,7 +306,7 @@ func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interfa
 	fmt.Printf("[DEBUG] Request payload size: %d bytes\n", len(jsonData))
 	fmt.Printf("[DEBUG] Request payload: %s\n", string(jsonData))
 
-	req, err := http.NewRequest("PUT", url, strings.NewReader(string(jsonData)))
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
