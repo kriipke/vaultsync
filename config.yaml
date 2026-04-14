@@ -1,0 +1,23 @@
+root_dir: ~/vaultsync-demo
+syncs:
+  - namespace: team-platform
+    vault_path: kubernetes/dev/example-app
+    local_path: dev
+  - namespace: team-platform
+    vault_path: kubernetes/qa/example-app
+    local_path: qa
+  - namespace: team-platform
+    vault_path: kubernetes/uat/example-app
+    local_path: uat
+  - namespace: team-platform
+    vault_path: kubernetes/test/example-app
+    local_path: tst
+  - namespace: team-platform
+    vault_path: kubernetes/stage/example-app
+    local_path: stage
+  - namespace: team-platform
+    vault_path: kubernetes/preprod/example-app
+    local_path: pdc
+  - namespace: team-platform
+    vault_path: kubernetes/prod/example-app
+    local_path: bdc
