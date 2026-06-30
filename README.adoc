@@ -12,7 +12,7 @@ endif::[]
 
 ++++
 <p align="center">
-  <img width="275" height="275" src="icon.png">
+  <img width="275" height="275" src="docs/vaultsync.png">
 </p>
 <p align="center">
     <h1 align="center">vaultsync</h1>
