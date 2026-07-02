@@ -3,8 +3,8 @@ Output push.gif
 
 Set Shell bash
 Set FontSize 20
-Set Width 920
-Set Height 640
+Set Width 1150
+Set Height 720
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 40ms
 Set Padding 20

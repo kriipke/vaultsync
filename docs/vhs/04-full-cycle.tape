@@ -4,8 +4,8 @@ Output full-cycle.gif
 
 Set Shell bash
 Set FontSize 20
-Set Width 920
-Set Height 880
+Set Width 1150
+Set Height 960
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 40ms
 Set Padding 20
