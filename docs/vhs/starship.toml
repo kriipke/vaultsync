@@ -1,0 +1,10 @@
+# Starship prompt for the VHS demo recordings — a minimal starship.rs-style
+# prompt: just the ❯ character (green on success, red on failure), with a
+# blank line between commands.
+add_newline = true
+
+format = "$character"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
