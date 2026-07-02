@@ -3,7 +3,6 @@
 :description: Sync secrets between HashiCorp Vault and local YAML files
 :toc: macro
 :toclevels: 3
-:imagesdir: docs/images
 ifdef::env-github[]
 :tip-caption: :rocket:
 :!showtitle:
@@ -18,7 +17,6 @@ endif::[]
     <h1 align="center">vaultsync</h1>
 
 
-    <!-- REPLACE THE FOLLOWING WITH YOUR REPOSITORY/PROJECT'S SHORT DESCRIPTION -->
     <h3 align="center">sync secrets between HashiCorp Vault and local YAML files</h3>
         <p align="center">
       <img height=20 src="https://img.shields.io/badge/Go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white">
@@ -50,14 +48,14 @@ toc::[]
 
 === Pre-built Binaries
 
-Download the latest release for your platform from the https://github.com/username/vaultsync/releases[releases page].
+Download the latest release for your platform from the https://github.com/kriipke/vaultsync/releases[releases page].
 
 ==== Linux/macOS
 
 [source,bash]
 ----
 # Download and extract (replace with your platform)
-curl -L https://github.com/username/vaultsync/releases/latest/download/vaultsync-linux-amd64.tar.gz | tar xz
+curl -L https://github.com/kriipke/vaultsync/releases/latest/download/vaultsync-linux-amd64.tar.gz | tar xz
 
 # Make executable and move to PATH
 chmod +x vaultsync
@@ -72,7 +70,7 @@ Download the `.zip` file and extract `vaultsync.exe` to a directory in your PATH
 
 [source,bash]
 ----
-git clone https://github.com/username/vaultsync.git
+git clone https://github.com/kriipke/vaultsync.git
 cd vaultsync
 go build -o vaultsync ./cmd/vaultsync
 ----
