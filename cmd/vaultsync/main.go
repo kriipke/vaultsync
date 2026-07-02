@@ -70,6 +70,10 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --kv-engine string   Name of the KVv2 secret engine (default \"kv\")")
 }
 
+// defaultSecretsDir is the directory used for pull output and push input when
+// the user does not specify one.
+const defaultSecretsDir = "./secrets"
+
 // looksLikePath reports whether an argument should be treated as a filesystem
 // path (output/input directory) rather than a Vault sub-path.
 func looksLikePath(arg string) bool {
@@ -77,6 +81,23 @@ func looksLikePath(arg string) bool {
 		strings.HasPrefix(arg, "../") ||
 		strings.HasPrefix(arg, "/") ||
 		strings.HasPrefix(arg, "~")
+}
+
+// splitSubPathAndDir interprets the arguments following the namespace: a
+// leading path-like argument is the directory; otherwise the first argument is
+// the Vault sub-path and an optional second argument is the directory.
+func splitSubPathAndDir(rest []string) (subPath, dir string) {
+	if len(rest) == 0 {
+		return "", ""
+	}
+	if looksLikePath(rest[0]) {
+		return "", rest[0]
+	}
+	subPath = rest[0]
+	if len(rest) > 1 {
+		dir = rest[1]
+	}
+	return subPath, dir
 }
 
 // pathDesc renders a human-readable description of the targeted KV path.
@@ -147,20 +168,9 @@ func parsePullArgs(args []string) (pullArgs, error) {
 	}
 
 	parsed := pullArgs{namespace: args[0]}
-	rest := args[1:]
-	if len(rest) > 0 {
-		if looksLikePath(rest[0]) {
-			parsed.outputDir = rest[0]
-		} else {
-			parsed.subPath = rest[0]
-			if len(rest) > 1 {
-				parsed.outputDir = rest[1]
-			}
-		}
-	}
-
+	parsed.subPath, parsed.outputDir = splitSubPathAndDir(args[1:])
 	if parsed.outputDir == "" {
-		parsed.outputDir = "./secrets"
+		parsed.outputDir = defaultSecretsDir
 	}
 	return parsed, nil
 }
@@ -216,20 +226,9 @@ func parsePushArgs(args []string) (pushArgs, error) {
 	}
 
 	parsed.namespace = positional[0]
-	rest := positional[1:]
-	if len(rest) > 0 {
-		if looksLikePath(rest[0]) {
-			parsed.inputDir = rest[0]
-		} else {
-			parsed.subPath = rest[0]
-			if len(rest) > 1 {
-				parsed.inputDir = rest[1]
-			}
-		}
-	}
-
+	parsed.subPath, parsed.inputDir = splitSubPathAndDir(positional[1:])
 	if parsed.inputDir == "" {
-		parsed.inputDir = "./secrets"
+		parsed.inputDir = defaultSecretsDir
 	}
 	return parsed, nil
 }
