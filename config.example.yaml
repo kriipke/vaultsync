@@ -1,3 +1,15 @@
+# Example VaultSync configuration — illustrative only.
+#
+# This file is NOT read by the tool. VaultSync loads its config from
+# ~/.config/vaultsync/config.yaml. Copy this file there and edit it to match
+# your namespaces and paths:
+#
+#   mkdir -p ~/.config/vaultsync
+#   cp config.example.yaml ~/.config/vaultsync/config.yaml
+#
+# `local_path` values are resolved under <root_dir>/secrets when relative, or
+# used as-is when absolute (in which case root_dir is optional).
+
 root_dir: ~/vaultsync-demo
 syncs:
   - namespace: team-platform
