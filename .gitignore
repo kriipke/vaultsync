@@ -4,8 +4,9 @@
 *.dll
 *.so
 *.dylib
-vaultsync
-vaultsync.exe
+/vaultsync
+/vaultsync.exe
+/vaultsync-*
 
 # Test binary, built with `go test -c`
 *.test
