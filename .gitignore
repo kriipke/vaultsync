@@ -35,8 +35,9 @@ go.work
 .DS_Store
 Thumbs.db
 
-# Local vault-secrets directory (default output)
+# Local secret output directories (never commit pulled secret material)
 vault-secrets/
+secrets/
 
 # Log files
 *.log

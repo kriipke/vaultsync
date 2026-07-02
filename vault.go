@@ -350,9 +350,9 @@ func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string
 	// Create file path with optional extension
 	filePath := filepath.Join(targetDir, relativePath+fileExtension)
 
-	// Create directory structure
+	// Create directory structure (0700: secret directories must not be world/group-accessible)
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
@@ -362,8 +362,8 @@ func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string
 		return fmt.Errorf("failed to convert to YAML: %w", err)
 	}
 
-	// Write to file
-	if err := os.WriteFile(filePath, yamlData, 0644); err != nil {
+	// Write to file (0600: secret material must not be world/group-readable)
+	if err := os.WriteFile(filePath, yamlData, 0600); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}
 
