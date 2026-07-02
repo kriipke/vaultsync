@@ -29,51 +29,6 @@ func TestNewSecretRefNormalizesPath(t *testing.T) {
 	}
 }
 
-func TestDeprecatedStringAPIStillRoutesThroughSecretRefMethods(t *testing.T) {
-	t.Parallel()
-
-	client := NewVaultClient("https://vault.example", "token", "namespace")
-	client.Output = nil
-	client.ErrOutput = nil
-	client.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/kv/metadata/app" && r.URL.RawQuery == "list=true":
-			return jsonResponse(t, http.StatusOK, map[string]any{
-				"data": map[string]any{
-					"keys": []string{"db"},
-				},
-			})
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/kv/data/app/db":
-			return jsonResponse(t, http.StatusOK, map[string]any{
-				"data": map[string]any{
-					"data": map[string]any{"username": "alice"},
-				},
-			})
-		default:
-			return textResponse(http.StatusNotFound, "not found"), nil
-		}
-	})}
-
-	outputDir := t.TempDir()
-	metadataPath := BuildMetadataPath("kv", "app")
-	if metadataPath != "kv/metadata/app" {
-		t.Fatalf("expected compatibility metadata path, got %q", metadataPath)
-	}
-
-	if err := client.PullSecretsToFiles(metadataPath, outputDir); err != nil {
-		t.Fatalf("expected compatibility pull to succeed, got %v", err)
-	}
-
-	contents, err := os.ReadFile(filepath.Join(outputDir, "app", "db.yaml"))
-	if err != nil {
-		t.Fatalf("expected compatibility write output, got %v", err)
-	}
-
-	if !strings.Contains(string(contents), "username: alice") {
-		t.Fatalf("expected compatibility YAML contents, got %q", string(contents))
-	}
-}
-
 func TestPullSecretsToFilesWritesRestrictivePermissions(t *testing.T) {
 	t.Parallel()
 

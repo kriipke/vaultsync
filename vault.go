@@ -129,11 +129,6 @@ func NewVaultClientFromEnv(namespace string) (*VaultClient, error) {
 	return NewVaultClient(vaultAddr, vaultToken, namespace), nil
 }
 
-// Deprecated: use NewSecretRef(kvEngine, subPath).MetadataPath() instead.
-func BuildMetadataPath(kvEngine, subPath string) string {
-	return NewSecretRef(kvEngine, subPath).MetadataPath()
-}
-
 func (v *VaultClient) output() io.Writer {
 	if v.Output == nil {
 		return io.Discard
@@ -188,11 +183,6 @@ func (v *VaultClient) ListSecretsAt(ref SecretRef) ([]string, error) {
 	return vaultResp.Data.Keys, nil
 }
 
-// Deprecated: use ListSecretsAt with SecretRef instead.
-func (v *VaultClient) ListSecrets(kvPath string) ([]string, error) {
-	return v.ListSecretsAt(secretRefFromMetadataPath(kvPath))
-}
-
 func (v *VaultClient) GetSecretAt(ref SecretRef) (map[string]interface{}, error) {
 	secretPath := ref.MetadataPath()
 	dataPath := metadataToDataPath(secretPath)
@@ -234,20 +224,10 @@ func (v *VaultClient) GetSecretAt(ref SecretRef) (map[string]interface{}, error)
 	return vaultResp.Data.Data, nil
 }
 
-// Deprecated: use GetSecretAt with SecretRef instead.
-func (v *VaultClient) GetSecret(secretPath string) (map[string]interface{}, error) {
-	return v.GetSecretAt(secretRefFromMetadataPath(secretPath))
-}
-
 func (v *VaultClient) PullSecretsRecursivelyAt(ref SecretRef) (map[string]map[string]interface{}, error) {
 	secrets := make(map[string]map[string]interface{})
 
 	return v.pullSecretsRecursivelyHelper(ref.MetadataPath(), secrets)
-}
-
-// Deprecated: use PullSecretsRecursivelyAt with SecretRef instead.
-func (v *VaultClient) PullSecretsRecursively(basePath string) (map[string]map[string]interface{}, error) {
-	return v.PullSecretsRecursivelyAt(secretRefFromMetadataPath(basePath))
 }
 
 func (v *VaultClient) pullSecretsRecursivelyHelper(currentPath string, secrets map[string]map[string]interface{}) (map[string]map[string]interface{}, error) {
@@ -289,18 +269,8 @@ func (v *VaultClient) PullSecretsToFilesAt(ref SecretRef, outputDir string) erro
 	return v.pullSecretsToFiles(ref.MetadataPath(), outputDir, true, ".yaml")
 }
 
-// Deprecated: use PullSecretsToFilesAt with SecretRef instead.
-func (v *VaultClient) PullSecretsToFiles(basePath, outputDir string) error {
-	return v.PullSecretsToFilesAt(secretRefFromMetadataPath(basePath), outputDir)
-}
-
 func (v *VaultClient) PullSecretsToFilesDirectAt(ref SecretRef, outputDir string) error {
 	return v.pullSecretsToFiles(ref.MetadataPath(), outputDir, false, "")
-}
-
-// Deprecated: use PullSecretsToFilesDirectAt with SecretRef instead.
-func (v *VaultClient) PullSecretsToFilesDirect(basePath, outputDir string) error {
-	return v.PullSecretsToFilesDirectAt(secretRefFromMetadataPath(basePath), outputDir)
 }
 
 func (v *VaultClient) pullSecretsToFiles(basePath, outputDir string, mirrorBasePath bool, fileExtension string) error {
@@ -410,27 +380,12 @@ func (v *VaultClient) PutSecretAt(ref SecretRef, secretData map[string]interface
 	return nil
 }
 
-// Deprecated: use PutSecretAt with SecretRef instead.
-func (v *VaultClient) PutSecret(secretPath string, secretData map[string]interface{}) error {
-	return v.PutSecretAt(secretRefFromMetadataPath(secretPath), secretData)
-}
-
 func (v *VaultClient) PushSecretsFromFilesAt(inputDir string, ref SecretRef, dryRun bool) error {
 	return v.pushSecretsFromFiles(inputDir, ref.MetadataPath(), dryRun, true, ".yaml")
 }
 
-// Deprecated: use PushSecretsFromFilesAt with SecretRef instead.
-func (v *VaultClient) PushSecretsFromFiles(inputDir, metadataPath string, dryRun bool) error {
-	return v.PushSecretsFromFilesAt(inputDir, secretRefFromMetadataPath(metadataPath), dryRun)
-}
-
 func (v *VaultClient) PushSecretsFromFilesDirectAt(inputDir string, ref SecretRef, dryRun bool) error {
 	return v.pushSecretsFromFiles(inputDir, ref.MetadataPath(), dryRun, false, "")
-}
-
-// Deprecated: use PushSecretsFromFilesDirectAt with SecretRef instead.
-func (v *VaultClient) PushSecretsFromFilesDirect(inputDir, metadataPath string, dryRun bool) error {
-	return v.PushSecretsFromFilesDirectAt(inputDir, secretRefFromMetadataPath(metadataPath), dryRun)
 }
 
 func shouldProcessSecretFile(filePath string, fileExtension string) bool {
