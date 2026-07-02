@@ -42,9 +42,9 @@ toc::[]
 * *Pull secrets* to local YAML files with directory structure mirroring
 * *Push secrets* back to Vault from YAML files
 * *Bulk pull/push* via a config file at `~/.config/vaultsync/config.yaml`
-* *Dry-run mode* with diff output (enhanced with delta/difftastic if available)
+* *Dry-run mode* with diff output (enhanced with delta if available)
 * *HCP Vault support* with enterprise namespaces
-* *Automatic diff tool detection* (delta, difftastic, diff-so-fancy)
+* *Automatic diff tool detection* (delta, diff-so-fancy)
 
 == Installation
 
@@ -240,7 +240,6 @@ Config-driven `pull-all` and `push-all` use each configured local directory as t
 The tool automatically detects and uses enhanced diff tools if available:
 
 . *delta* - Side-by-side diffs with syntax highlighting
-. *difftastic* - Syntax-aware structural diffs
 . *diff-so-fancy* - Enhanced unified diffs
 
 Install any of these tools to get improved `--dry-run` output:
