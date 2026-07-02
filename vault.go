@@ -583,20 +583,20 @@ type diffOp struct {
 	text string
 }
 
-func generateUnifiedDiff(existing, new, filename string) string {
-	if existing == new {
+func generateUnifiedDiff(existing, updated, filename string) string {
+	if existing == updated {
 		return "" // No changes
 	}
 
 	existingLines := splitDiffLines(existing)
-	newLines := splitDiffLines(new)
+	updatedLines := splitDiffLines(updated)
 
-	ops := lcsDiff(existingLines, newLines)
+	ops := lcsDiff(existingLines, updatedLines)
 
 	var diff bytes.Buffer
 	// Header
 	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filename, filename))
-	diff.WriteString(fmt.Sprintf("index %s..%s 100644\n", generateShortHash(existing), generateShortHash(new)))
+	diff.WriteString(fmt.Sprintf("index %s..%s 100644\n", generateShortHash(existing), generateShortHash(updated)))
 	diff.WriteString(fmt.Sprintf("--- a/%s\n", filename))
 	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filename))
 
