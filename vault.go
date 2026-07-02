@@ -350,7 +350,7 @@ func (v *VaultClient) writeSecretToFile(secretPath string, secretData map[string
 	// Create file path with optional extension
 	filePath := filepath.Join(targetDir, relativePath+fileExtension)
 
-	// Create directory structure
+	// Create directory structure (0700: secret directories must not be world/group-accessible)
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
