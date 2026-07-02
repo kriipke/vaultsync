@@ -27,17 +27,14 @@ endif::[]
 
 </p>
 <br/>
+<p align="center">
+  <img width="700" src="docs/vhs/full-cycle.gif" alt="vaultsync demo: list, pull, edit, and push secrets">
+</p>
 ++++
 
 A CLI tool for syncing secrets between HashiCorp Vault and local YAML files, with support for HCP (HashiCorp Cloud Platform) Vault. The core sync logic is also importable as a Go library (see <<using-as-a-library,Using as a Library>>).
 
 toc::[]
-
-++++
-<p align="center">
-  <img width="700" src="docs/vhs/full-cycle.gif" alt="vaultsync demo: list, pull, edit, and push secrets">
-</p>
-++++
 
 == Features
 
