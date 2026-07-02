@@ -1,4 +1,4 @@
-module vaultsync
+module github.com/kriipke/vaultsync
 
 go 1.21
 
