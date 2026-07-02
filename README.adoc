@@ -22,6 +22,7 @@ endif::[]
       <img height=20 src="https://img.shields.io/badge/Go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white">
   <img height=20 src="https://img.shields.io/badge/HashiCorp_Vault-FFEC6E?style=for-the-badge&logo=vault&logoColor=black">
   <img height=20 src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge">
+  <a href="https://github.com/kriipke/vaultsync/actions/workflows/ci.yml"><img height=20 src="https://github.com/kriipke/vaultsync/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
 
 </p>
 <br/>
