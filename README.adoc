@@ -145,11 +145,19 @@ vaultsync [--kv-engine=name] push-all [--dry-run]
 
 Config-driven syncs write files directly into each configured `local_path` and do not add a `.yaml` suffix.
 
-Config file location:
+VaultSync reads its config from a single fixed location:
 
 [source,bash]
 ----
 ~/.config/vaultsync/config.yaml
+----
+
+A sample config lives at `config.example.yaml` in the repository root. It is illustrative only and is never read by the tool — copy it into place and edit it:
+
+[source,bash]
+----
+mkdir -p ~/.config/vaultsync
+cp config.example.yaml ~/.config/vaultsync/config.yaml
 ----
 
 Supported YAML formats:
