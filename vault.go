@@ -576,108 +576,174 @@ func (v *VaultClient) showDryRunDiff(vaultPath string, newData map[string]interf
 	return nil
 }
 
-func generateUnifiedDiff(existing, new, filename string) string {
-	if existing == new {
+// diffOp is a single line of an edit script: kind is ' ' (unchanged), '-'
+// (removed) or '+' (added).
+type diffOp struct {
+	kind byte
+	text string
+}
+
+func generateUnifiedDiff(existing, updated, filename string) string {
+	if existing == updated {
 		return "" // No changes
 	}
 
-	existingLines := strings.Split(existing, "\n")
-	newLines := strings.Split(new, "\n")
+	existingLines := splitDiffLines(existing)
+	updatedLines := splitDiffLines(updated)
+
+	ops := lcsDiff(existingLines, updatedLines)
 
 	var diff bytes.Buffer
-
 	// Header
 	diff.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filename, filename))
-	diff.WriteString(fmt.Sprintf("index %s..%s 100644\n", generateShortHash(existing), generateShortHash(new)))
+	diff.WriteString(fmt.Sprintf("index %s..%s 100644\n", generateShortHash(existing), generateShortHash(updated)))
 	diff.WriteString(fmt.Sprintf("--- a/%s\n", filename))
 	diff.WriteString(fmt.Sprintf("+++ b/%s\n", filename))
 
-	// Simple line-by-line diff (basic implementation)
-	maxLines := len(existingLines)
-	if len(newLines) > maxLines {
-		maxLines = len(newLines)
-	}
-
-	inHunk := false
-	hunkStart := 0
-	hunkLines := []string{}
-
-	for i := 0; i < maxLines; i++ {
-		existingLine := ""
-		newLine := ""
-
-		if i < len(existingLines) {
-			existingLine = existingLines[i]
-		}
-		if i < len(newLines) {
-			newLine = newLines[i]
-		}
-
-		if existingLine != newLine {
-			if !inHunk {
-				// Start new hunk
-				inHunk = true
-				hunkStart = max(0, i-3) // 3 lines of context
-				hunkLines = []string{}
-
-				// Add context before the change
-				for j := hunkStart; j < i; j++ {
-					if j < len(existingLines) {
-						hunkLines = append(hunkLines, " "+existingLines[j])
-					}
-				}
-			}
-
-			// Add removed line
-			if i < len(existingLines) && existingLine != "" {
-				hunkLines = append(hunkLines, "-"+existingLine)
-			}
-			// Add added line
-			if i < len(newLines) && newLine != "" {
-				hunkLines = append(hunkLines, "+"+newLine)
-			}
-		} else if inHunk {
-			// Add context line
-			hunkLines = append(hunkLines, " "+existingLine)
-
-			// Check if we should end the hunk (after 3 context lines)
-			contextCount := 0
-			for j := len(hunkLines) - 1; j >= 0 && strings.HasPrefix(hunkLines[j], " "); j-- {
-				contextCount++
-			}
-
-			if contextCount >= 3 {
-				// End hunk
-				writeHunk(&diff, hunkStart, i-contextCount+1, len(existingLines), len(newLines), hunkLines[:len(hunkLines)-contextCount+3])
-				inHunk = false
-			}
-		}
-	}
-
-	// Close any remaining hunk
-	if inHunk {
-		writeHunk(&diff, hunkStart, maxLines, len(existingLines), len(newLines), hunkLines)
-	}
+	writeHunks(&diff, ops)
 
 	return diff.String()
 }
 
-func writeHunk(diff *bytes.Buffer, start, end, oldLen, newLen int, lines []string) {
-	oldCount := 0
-	newCount := 0
+// splitDiffLines splits content into lines, dropping the trailing empty element
+// produced by a final newline so a newline-terminated file is not diffed as
+// having a spurious blank last line.
+func splitDiffLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
 
-	for _, line := range lines {
-		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, " ") {
-			oldCount++
-		}
-		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, " ") {
-			newCount++
+// lcsDiff produces an edit script transforming a into b using a longest-common-
+// subsequence alignment, so lines shifted by an insertion or deletion are
+// correctly matched as unchanged rather than mislabeled.
+func lcsDiff(a, b []string) []diffOp {
+	n, m := len(a), len(b)
+
+	// dp[i][j] = length of LCS of a[i:] and b[j:].
+	dp := make([][]int, n+1)
+	for i := range dp {
+		dp[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				dp[i][j] = dp[i+1][j+1] + 1
+			} else if dp[i+1][j] >= dp[i][j+1] {
+				dp[i][j] = dp[i+1][j]
+			} else {
+				dp[i][j] = dp[i][j+1]
+			}
 		}
 	}
 
-	diff.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", start+1, oldCount, start+1, newCount))
-	for _, line := range lines {
-		diff.WriteString(line + "\n")
+	var ops []diffOp
+	i, j := 0, 0
+	for i < n && j < m {
+		switch {
+		case a[i] == b[j]:
+			ops = append(ops, diffOp{' ', a[i]})
+			i++
+			j++
+		case dp[i+1][j] >= dp[i][j+1]:
+			ops = append(ops, diffOp{'-', a[i]})
+			i++
+		default:
+			ops = append(ops, diffOp{'+', b[j]})
+			j++
+		}
+	}
+	for ; i < n; i++ {
+		ops = append(ops, diffOp{'-', a[i]})
+	}
+	for ; j < m; j++ {
+		ops = append(ops, diffOp{'+', b[j]})
+	}
+	return ops
+}
+
+// writeHunks groups the edit script into unified-diff hunks with up to 3 lines
+// of surrounding context, merging changes separated by small gaps.
+func writeHunks(diff *bytes.Buffer, ops []diffOp) {
+	const context = 3
+	n := len(ops)
+
+	i := 0
+	for i < n {
+		if ops[i].kind == ' ' {
+			i++
+			continue
+		}
+
+		// Leading context.
+		lo := i - context
+		if lo < 0 {
+			lo = 0
+		}
+
+		// Extend across changes, merging runs separated by <= 2*context
+		// unchanged lines into the same hunk.
+		hi := i
+		eqRun := 0
+		j := i
+		for j < n {
+			if ops[j].kind != ' ' {
+				hi = j + 1
+				eqRun = 0
+			} else {
+				eqRun++
+				if eqRun > 2*context {
+					break
+				}
+			}
+			j++
+		}
+
+		// Trailing context.
+		end := hi + context
+		if end > n {
+			end = n
+		}
+
+		oldStart, newStart := 1, 1
+		for k := 0; k < lo; k++ {
+			switch ops[k].kind {
+			case ' ':
+				oldStart++
+				newStart++
+			case '-':
+				oldStart++
+			case '+':
+				newStart++
+			}
+		}
+
+		oldCount, newCount := 0, 0
+		for k := lo; k < end; k++ {
+			switch ops[k].kind {
+			case ' ':
+				oldCount++
+				newCount++
+			case '-':
+				oldCount++
+			case '+':
+				newCount++
+			}
+		}
+
+		diff.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", oldStart, oldCount, newStart, newCount))
+		for k := lo; k < end; k++ {
+			diff.WriteByte(ops[k].kind)
+			diff.WriteString(ops[k].text)
+			diff.WriteByte('\n')
+		}
+
+		i = end
 	}
 }
 
@@ -693,15 +759,14 @@ func generateShortHash(content string) string {
 	return fmt.Sprintf("%07x", hash%0xfffffff)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 var diffTool string
 var diffToolDetected bool
+
+// diffPipeTools are the external diff renderers we auto-detect, in order of
+// preference. They must accept a unified diff on stdin — difftastic is
+// deliberately excluded because it compares files directly and cannot read a
+// unified diff from stdin (and it installs as `difft`, not `difftastic`).
+var diffPipeTools = []string{"delta", "diff-so-fancy"}
 
 func detectDiffTool() string {
 	if diffToolDetected {
@@ -710,10 +775,7 @@ func detectDiffTool() string {
 
 	diffToolDetected = true
 
-	// Check for diff tools in order of preference
-	tools := []string{"delta", "difftastic", "diff-so-fancy"}
-
-	for _, tool := range tools {
+	for _, tool := range diffPipeTools {
 		if _, err := exec.LookPath(tool); err == nil {
 			diffTool = tool
 			return diffTool
@@ -740,8 +802,6 @@ func outputDiff(diffContent string, stdout, stderr io.Writer) {
 	switch tool {
 	case "delta":
 		cmd = exec.Command("delta", "--no-gitconfig", "--side-by-side")
-	case "difftastic":
-		cmd = exec.Command("difftastic", "--display=side-by-side")
 	case "diff-so-fancy":
 		cmd = exec.Command("diff-so-fancy")
 	default:
