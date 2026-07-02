@@ -74,6 +74,54 @@ func TestDeprecatedStringAPIStillRoutesThroughSecretRefMethods(t *testing.T) {
 	}
 }
 
+func TestPullSecretsToFilesWritesRestrictivePermissions(t *testing.T) {
+	t.Parallel()
+
+	client := NewVaultClient("https://vault.example", "token", "namespace")
+	client.Output = nil
+	client.ErrOutput = nil
+	client.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/kv/metadata/app" && r.URL.RawQuery == "list=true":
+			return jsonResponse(t, http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"keys": []string{"db"},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/kv/data/app/db":
+			return jsonResponse(t, http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"data": map[string]any{"password": "s3cr3t"},
+				},
+			})
+		default:
+			return textResponse(http.StatusNotFound, "not found"), nil
+		}
+	})}
+
+	outputDir := t.TempDir()
+	if err := client.PullSecretsToFilesAt(NewSecretRef("kv", "app"), outputDir); err != nil {
+		t.Fatalf("expected pull to succeed, got %v", err)
+	}
+
+	filePath := filepath.Join(outputDir, "app", "db.yaml")
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("expected secret file to exist, got %v", err)
+	}
+	if got := fileInfo.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected secret file mode 0600, got %o", got)
+	}
+
+	dirInfo, err := os.Stat(filepath.Join(outputDir, "app"))
+	if err != nil {
+		t.Fatalf("expected secret directory to exist, got %v", err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o700 {
+		t.Fatalf("expected secret directory mode 0700, got %o", got)
+	}
+}
+
 func TestPullSecretsRecursivelyReturnsErrorOnSecretFetchFailure(t *testing.T) {
 	t.Parallel()
 
