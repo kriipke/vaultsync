@@ -28,9 +28,16 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vaultsync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	kvEngine := fs.String("kv-engine", "kv", "Name of the KVv2 secret engine")
+	showVersion := fs.Bool("version", false, "Print version information and exit")
+	fs.BoolVar(showVersion, "v", false, "Print version information and exit (shorthand)")
 
 	if err := fs.Parse(argv); err != nil {
 		return 2
+	}
+
+	if *showVersion {
+		printVersion(stdout)
+		return 0
 	}
 
 	rest := fs.Args()
@@ -43,8 +50,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	cmdArgs := rest[1:]
 
 	switch command {
-	case "version", "--version":
-		fmt.Fprintf(stdout, "vaultsync %s (built %s)\n", version, buildTime)
+	case "version":
+		printVersion(stdout)
 		return 0
 	case "list":
 		return cmdList(*kvEngine, cmdArgs, stdout, stderr)
@@ -65,9 +72,15 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  list <namespace> [path]                          List secret names")
 	fmt.Fprintln(w, "  pull <namespace> [path] [output-dir]             Pull secrets recursively to files")
 	fmt.Fprintln(w, "  push <namespace> [path] [input-dir] [--dry-run]  Push secrets from YAML files to Vault")
+	fmt.Fprintln(w, "  version                                          Print version information")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --kv-engine string   Name of the KVv2 secret engine (default \"kv\")")
+	fmt.Fprintln(w, "  --version            Print version information and exit")
+}
+
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "vaultsync %s (built %s)\n", version, buildTime)
 }
 
 // defaultSecretsDir is the directory used for pull output and push input when

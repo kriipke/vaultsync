@@ -58,16 +58,18 @@ jobs:
           BINARY_NAME="${BINARY_NAME}.exe"
         fi
         
-        # Build the binary
-        go build -a -installsuffix cgo -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }}" -o $BINARY_NAME .
+        # Build the binary (CLI entrypoint lives at ./cmd/vaultsync; the repo
+        # root is the importable library package, not package main)
+        BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        go build -a -installsuffix cgo -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }} -X main.buildTime=${BUILD_TIME}" -o $BINARY_NAME ./cmd/vaultsync
         
         # Create archive
         ARCHIVE_NAME="vaultsync-${{ steps.version.outputs.VERSION }}-${{ matrix.goos }}-${{ matrix.goarch }}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
-          zip "${ARCHIVE_NAME}.zip" $BINARY_NAME README.md
+          zip "${ARCHIVE_NAME}.zip" $BINARY_NAME README.adoc LICENSE
           echo "ASSET=${ARCHIVE_NAME}.zip" >> $GITHUB_ENV
         else
-          tar -czf "${ARCHIVE_NAME}.tar.gz" $BINARY_NAME README.md
+          tar -czf "${ARCHIVE_NAME}.tar.gz" $BINARY_NAME README.adoc LICENSE
           echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_ENV
         fi
 

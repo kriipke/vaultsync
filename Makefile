@@ -1,6 +1,6 @@
 # Vault Sync Makefile
 
-.PHONY: build clean test install dev-deps lint fmt vet release-local
+.PHONY: build clean test test-integration install dev-deps lint fmt vet release-local
 
 # Variables
 BINARY_NAME=vaultsync
@@ -33,6 +33,11 @@ clean:
 test:
 	go test -v ./...
 
+# Run integration tests against a live Vault (see vault_integration_test.go).
+# Requires VAULT_ADDR/VAULT_TOKEN pointing at a reachable Vault.
+test-integration:
+	VAULTSYNC_INTEGRATION=1 go test -run Integration -v ./...
+
 # Install the binary
 install: build
 	sudo mv $(BINARY_NAME) /usr/local/bin/
@@ -59,11 +64,11 @@ check: fmt vet lint test
 # Create a local release (for testing)
 release-local: clean build-all
 	mkdir -p dist
-	tar -czf dist/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz $(BINARY_NAME)-linux-amd64 README.md
-	tar -czf dist/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz $(BINARY_NAME)-linux-arm64 README.md
-	tar -czf dist/$(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz $(BINARY_NAME)-darwin-amd64 README.md
-	tar -czf dist/$(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz $(BINARY_NAME)-darwin-arm64 README.md
-	zip dist/$(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-windows-amd64.exe README.md
+	tar -czf dist/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz $(BINARY_NAME)-linux-amd64 README.adoc LICENSE
+	tar -czf dist/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz $(BINARY_NAME)-linux-arm64 README.adoc LICENSE
+	tar -czf dist/$(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz $(BINARY_NAME)-darwin-amd64 README.adoc LICENSE
+	tar -czf dist/$(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz $(BINARY_NAME)-darwin-arm64 README.adoc LICENSE
+	zip dist/$(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-windows-amd64.exe README.adoc LICENSE
 	cd dist && sha256sum * > checksums.txt
 
 # Help
@@ -73,6 +78,7 @@ help:
 	@echo "  build-all    - Build for all platforms"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  test         - Run tests"
+	@echo "  test-integration - Run integration tests against a live Vault"
 	@echo "  install      - Install the binary to /usr/local/bin"
 	@echo "  dev-deps     - Install development dependencies"
 	@echo "  lint         - Run linter"

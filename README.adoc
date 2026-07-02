@@ -40,7 +40,7 @@ toc::[]
 * *List secrets* from Vault KVv2 engines
 * *Pull secrets* to local YAML files with directory structure mirroring
 * *Push secrets* back to Vault from YAML files
-* *Bulk pull/push* via a config file at `~/.config/vaultsync/config.yaml`
+* *Bulk pull/push* via the importable Go library, driven by a config file at `~/.config/vaultsync/config.yaml`
 * *Dry-run mode* with diff output (enhanced with delta if available)
 * *HCP Vault support* with enterprise namespaces
 * *Automatic diff tool detection* (delta, diff-so-fancy)
@@ -55,8 +55,9 @@ Download the latest release for your platform from the https://github.com/kriipk
 
 [source,bash]
 ----
-# Download and extract (replace with your platform)
-curl -L https://github.com/kriipke/vaultsync/releases/latest/download/vaultsync-linux-amd64.tar.gz | tar xz
+# Download and extract (set VERSION to the latest release tag and match your platform)
+VERSION=v0.1.8
+curl -L "https://github.com/kriipke/vaultsync/releases/download/${VERSION}/vaultsync-${VERSION}-linux-amd64.tar.gz" | tar xz
 
 # Make executable and move to PATH
 chmod +x vaultsync
@@ -136,13 +137,12 @@ vaultsync push my-namespace app ./secrets      # push 'app' from ./secrets/app/
 
 ==== Bulk Pull and Push from Config
 
-[source,bash]
-----
-vaultsync [--kv-engine=name] pull-all
-vaultsync [--kv-engine=name] push-all [--dry-run]
-----
-
-Config-driven syncs write files directly into each configured `local_path` and do not add a `.yaml` suffix.
+Bulk, config-driven sync is available programmatically through the Go library
+(`LoadVaultSyncConfig` together with `RunPullAll`/`RunPushAll`), not as a CLI
+subcommand — see <<using-as-a-library,Using as a Library>> for a runnable
+example. The config format below describes what the library reads. Config-driven
+syncs write files directly into each configured `local_path` and do not add a
+`.yaml` suffix.
 
 VaultSync reads its config from a single fixed location:
 
@@ -237,7 +237,7 @@ Direct `pull` and `push` commands mirror the requested Vault path and use `.yaml
 
 * `--kv-engine=secrets` with path `app/db` -> `./secrets/app/db.yaml`
 
-Config-driven `pull-all` and `push-all` use each configured local directory as the direct root and write extensionless files:
+Config-driven bulk sync (via the library) uses each configured local directory as the direct root and writes extensionless files:
 
 * `vault_path: kubernetes/dev/example-app` with `local_path: ~/vaultsync-demo/secrets/dev` -> `~/vaultsync-demo/secrets/dev/database`
 * Nested Vault secrets below that path still create subdirectories only for the secret path segments below the configured base.
@@ -314,6 +314,32 @@ Useful exported entry points:
 * `(*vaultsync.VaultClient).PullSecretsToFilesAt(...)`
 * `(*vaultsync.VaultClient).PushSecretsFromFilesAt(...)`
 * `vaultsync.LoadVaultSyncConfig()`
+* `vaultsync.RunPullAll(...)` / `vaultsync.RunPushAll(...)` — bulk config-driven sync
+
+=== Config-Driven Bulk Sync
+
+Bulk pull/push is exposed through the library rather than the CLI. Load the
+config from `~/.config/vaultsync/config.yaml` (the format is documented under
+<<_bulk_pull_and_push_from_config,Usage>>) and run every configured target in a
+single call:
+
+[source,go]
+----
+cfg, err := vaultsync.LoadVaultSyncConfig()
+if err != nil {
+	log.Fatal(err)
+}
+
+// Pull every configured target into its local_path.
+if err := vaultsync.RunPullAll(cfg, "kv", vaultsync.NewVaultClientFromEnv); err != nil {
+	log.Fatal(err)
+}
+
+// Preview pushes for every configured target (dry-run).
+if err := vaultsync.RunPushAll(cfg, "kv", true, vaultsync.NewVaultClientFromEnv); err != nil {
+	log.Fatal(err)
+}
+----
 
 == Contributing
 

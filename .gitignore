@@ -45,3 +45,9 @@ secrets/
 # Temporary files
 tmp/
 temp/
+
+# Node dependencies for the .sandcastle harness (package.json is committed)
+node_modules/
+
+# Generated VHS demo stub binary (not the real build)
+docs/vhs/bin/
