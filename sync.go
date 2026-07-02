@@ -20,8 +20,8 @@ type ClientFactory func(namespace string) (*VaultClient, error)
 // pull-all behavior). Failures are aggregated so a single unreachable target
 // does not abort syncing of the others.
 func RunPullAll(cfg *VaultSyncConfig, kvEngine string, newClient ClientFactory) error {
-	return runSyncs(cfg, kvEngine, newClient, func(client *VaultClient, ref SecretRef, sync SyncTarget) error {
-		return client.PullSecretsToFilesDirectAt(ref, sync.LocalPath)
+	return runSyncs(cfg, kvEngine, newClient, func(client *VaultClient, ref SecretRef, target SyncTarget) error {
+		return client.PullSecretsToFilesDirectAt(ref, target.LocalPath)
 	})
 }
 
@@ -30,8 +30,8 @@ func RunPullAll(cfg *VaultSyncConfig, kvEngine string, newClient ClientFactory) 
 // written. As with RunPullAll, per-target failures are aggregated rather than
 // fatal.
 func RunPushAll(cfg *VaultSyncConfig, kvEngine string, dryRun bool, newClient ClientFactory) error {
-	return runSyncs(cfg, kvEngine, newClient, func(client *VaultClient, ref SecretRef, sync SyncTarget) error {
-		return client.PushSecretsFromFilesDirectAt(sync.LocalPath, ref, dryRun)
+	return runSyncs(cfg, kvEngine, newClient, func(client *VaultClient, ref SecretRef, target SyncTarget) error {
+		return client.PushSecretsFromFilesDirectAt(target.LocalPath, ref, dryRun)
 	})
 }
 
@@ -49,16 +49,16 @@ func runSyncs(cfg *VaultSyncConfig, kvEngine string, newClient ClientFactory, ac
 	}
 
 	var resultErr error
-	for i, sync := range cfg.Syncs {
-		client, err := newClient(sync.Namespace)
+	for i, target := range cfg.Syncs {
+		client, err := newClient(target.Namespace)
 		if err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("sync entry %d (namespace %q): %w", i+1, sync.Namespace, err))
+			resultErr = errors.Join(resultErr, fmt.Errorf("sync entry %d (namespace %q): %w", i+1, target.Namespace, err))
 			continue
 		}
 
-		ref := NewSecretRef(kvEngine, sync.VaultPath)
-		if err := action(client, ref, sync); err != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("sync entry %d (%s -> %s): %w", i+1, sync.VaultPath, sync.LocalPath, err))
+		ref := NewSecretRef(kvEngine, target.VaultPath)
+		if err := action(client, ref, target); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("sync entry %d (%s -> %s): %w", i+1, target.VaultPath, target.LocalPath, err))
 		}
 	}
 
