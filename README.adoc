@@ -280,7 +280,7 @@ package main
 import (
 	"log"
 
-	"vaultsync"
+	"github.com/kriipke/vaultsync"
 )
 
 func main() {

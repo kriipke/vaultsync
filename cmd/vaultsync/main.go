@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"vaultsync"
+	"github.com/kriipke/vaultsync"
 )
 
 // Populated at build time via -ldflags "-X main.version=... -X main.buildTime=...".
