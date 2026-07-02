@@ -127,33 +127,33 @@ func TestNormalizeAndValidateSyncTarget(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		sync         SyncTarget
-		rootDir      string
-		wantLocal    string
-		wantVaultPth string
-		wantErr      bool
+		name          string
+		sync          SyncTarget
+		rootDir       string
+		wantLocalPath string
+		wantVaultPath string
+		wantErr       bool
 	}{
 		{
-			name:         "absolute local path kept",
-			sync:         SyncTarget{Namespace: "team-a", VaultPath: "/kv/app/", LocalPath: "/abs/app"},
-			rootDir:      "/srv/vault",
-			wantLocal:    "/abs/app",
-			wantVaultPth: "kv/app",
+			name:          "absolute local path kept",
+			sync:          SyncTarget{Namespace: "team-a", VaultPath: "/kv/app/", LocalPath: "/abs/app"},
+			rootDir:       "/srv/vault",
+			wantLocalPath: "/abs/app",
+			wantVaultPath: "kv/app",
 		},
 		{
-			name:         "relative local path joined under root secrets dir",
-			sync:         SyncTarget{Namespace: "team-a", VaultPath: "kv/app", LocalPath: "app"},
-			rootDir:      "/srv/vault",
-			wantLocal:    filepath.Join("/srv/vault", secretsDirName, "app"),
-			wantVaultPth: "kv/app",
+			name:          "relative local path joined under root secrets dir",
+			sync:          SyncTarget{Namespace: "team-a", VaultPath: "kv/app", LocalPath: "app"},
+			rootDir:       "/srv/vault",
+			wantLocalPath: filepath.Join("/srv/vault", secretsDirName, "app"),
+			wantVaultPath: "kv/app",
 		},
 		{
-			name:         "tilde local path expanded and used directly",
-			sync:         SyncTarget{Namespace: "team-a", VaultPath: "kv/app", LocalPath: "~/secrets/app"},
-			rootDir:      "/srv/vault",
-			wantLocal:    filepath.Join(home, "secrets", "app"),
-			wantVaultPth: "kv/app",
+			name:          "tilde local path expanded and used directly",
+			sync:          SyncTarget{Namespace: "team-a", VaultPath: "kv/app", LocalPath: "~/secrets/app"},
+			rootDir:       "/srv/vault",
+			wantLocalPath: filepath.Join(home, "secrets", "app"),
+			wantVaultPath: "kv/app",
 		},
 		{
 			name:    "relative local path without root dir rejected",
@@ -194,12 +194,12 @@ func TestNormalizeAndValidateSyncTarget(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if sync.LocalPath != tt.wantLocal {
-				t.Fatalf("expected local_path %q, got %q", tt.wantLocal, sync.LocalPath)
+			if sync.LocalPath != tt.wantLocalPath {
+				t.Fatalf("expected local_path %q, got %q", tt.wantLocalPath, sync.LocalPath)
 			}
 
-			if sync.VaultPath != tt.wantVaultPth {
-				t.Fatalf("expected vault_path %q, got %q", tt.wantVaultPth, sync.VaultPath)
+			if sync.VaultPath != tt.wantVaultPath {
+				t.Fatalf("expected vault_path %q, got %q", tt.wantVaultPath, sync.VaultPath)
 			}
 		})
 	}
